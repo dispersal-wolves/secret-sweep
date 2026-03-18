@@ -1,0 +1,13 @@
+{
+  "name": "dispersal-secret-sweep",
+  "version": "0.1.0",
+  "description": "Local credential and secret scanner",
+  "type": "module",
+  "bin": {"secret-sweep": "src/secret-sweep.js"},
+  "scripts": {
+    "test": "node --test",
+    "lint": "node --check src/secret-sweep.js"
+  },
+  "engines": {"node": ">=20"},
+  "license": "MIT"
+}
