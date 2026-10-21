@@ -7,6 +7,18 @@ import {loadConfig, scanFiles, walk} from './scanner.js';
 
 function usage() {
   console.log('Usage: secret-sweep <scan [path] | staged> [--format text|json] [--max-bytes N]');
+  console.log('       secret-sweep --help');
+  console.log('');
+  console.log('Commands:');
+  console.log('  scan [path]       Scan files under path (default: current directory)');
+  console.log('  staged            Scan content staged in the current Git repository');
+  console.log('');
+  console.log('Options:');
+  console.log('  --format text|json  Output format (default: text)');
+  console.log('  --max-bytes N       Skip files larger than N bytes (default: 2000000)');
+  console.log('  -h, --help          Show this help');
+  console.log('');
+  console.log('Exit codes: 0 no findings, 1 findings, 2 usage or runtime error.');
 }
 
 function stagedFiles(root) {
@@ -16,6 +28,10 @@ function stagedFiles(root) {
 
 export function run(argv) {
   const command = argv[0];
+  if (argv.includes('--help') || argv.includes('-h')) {
+    usage();
+    return 0;
+  }
   if (!['scan', 'staged'].includes(command)) {
     usage();
     return 2;
