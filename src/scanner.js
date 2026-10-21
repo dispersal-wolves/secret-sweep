@@ -104,15 +104,19 @@ export function walk(root, configured = []) {
   return files;
 }
 
-export function scanFiles(root, files, config, maxBytes = 2_000_000) {
+function readFromDisk(file, maxBytes) {
+  let stats;
+  try { stats = fs.statSync(file); } catch { return null; }
+  if (stats.size > maxBytes) return null;
+  return fs.readFileSync(file);
+}
+
+export function scanFiles(root, files, config, maxBytes = 2_000_000, read = readFromDisk) {
   const ignored = new Set(config.ignoreFingerprints);
   const findings = [];
   for (const file of files) {
-    let stats;
-    try { stats = fs.statSync(file); } catch { continue; }
-    if (stats.size > maxBytes) continue;
-    const buffer = fs.readFileSync(file);
-    if (isProbablyBinary(buffer)) continue;
+    const buffer = read(file, maxBytes);
+    if (!buffer || isProbablyBinary(buffer)) continue;
     findings.push(...scanText(buffer.toString('utf8'), path.relative(root, file).split(path.sep).join('/'), ignored));
   }
   return findings;

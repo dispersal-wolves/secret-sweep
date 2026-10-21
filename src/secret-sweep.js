@@ -3,15 +3,33 @@ import childProcess from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import {loadConfig, scanFiles, walk} from './scanner.js';
+import {loadConfig, scanFiles, shouldIgnore, walk} from './scanner.js';
 
 function usage() {
   console.log('Usage: secret-sweep <scan [path] | staged> [--format text|json] [--max-bytes N]');
 }
 
-function stagedFiles(root) {
-  const output = childProcess.execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACMR', '-z'], {cwd: root});
-  return output.toString('utf8').split('\0').filter(Boolean).map((file) => path.join(root, file)).filter((file) => fs.existsSync(file));
+function git(root, args, options = {}) {
+  return childProcess.execFileSync('git', args, {cwd: root, stdio: ['ignore', 'pipe', 'pipe'], ...options});
+}
+
+function repositoryRoot(directory) {
+  return git(directory, ['rev-parse', '--show-toplevel']).toString('utf8').trim();
+}
+
+function stagedFiles(root, ignorePaths) {
+  const output = git(root, ['diff', '--cached', '--name-only', '--diff-filter=ACMR', '-z']);
+  return output.toString('utf8').split('\0').filter(Boolean).filter((file) => !shouldIgnore(file, ignorePaths)).map((file) => path.join(root, file));
+}
+
+// Reads the staged blob rather than the working tree, so the scan matches what will be committed.
+function stagedReader(root) {
+  return (file, maxBytes) => {
+    const spec = `:${path.relative(root, file).split(path.sep).join('/')}`;
+    const size = Number(git(root, ['cat-file', '-s', spec]).toString('utf8').trim());
+    if (size > maxBytes) return null;
+    return git(root, ['cat-file', 'blob', spec], {maxBuffer: size + 1024});
+  };
 }
 
 export function run(argv) {
@@ -33,15 +51,16 @@ export function run(argv) {
     return 2;
   }
   const candidatePath = command === 'scan' && argv[1] && !argv[1].startsWith('--') ? argv[1] : '.';
-  const root = path.resolve(command === 'staged' ? '.' : candidatePath);
+  let root = path.resolve(command === 'staged' ? '.' : candidatePath);
   if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
     console.error(`Directory not found: ${root}`);
     return 2;
   }
   try {
+    if (command === 'staged') root = repositoryRoot(root);
     const config = loadConfig(root);
-    const files = command === 'staged' ? stagedFiles(root) : walk(root, config.ignorePaths);
-    const findings = scanFiles(root, files, config, maxBytes);
+    const files = command === 'staged' ? stagedFiles(root, config.ignorePaths) : walk(root, config.ignorePaths);
+    const findings = scanFiles(root, files, config, maxBytes, command === 'staged' ? stagedReader(root) : undefined);
     if (format === 'json') {
       console.log(JSON.stringify({schema: 'dispersal-wolves/secret-sweep/v1', summary: {files: files.length, findings: findings.length}, findings}, null, 2));
     } else {
