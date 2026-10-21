@@ -3,6 +3,7 @@ import childProcess from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import {fileURLToPath} from 'node:url';
 import {loadConfig, scanFiles, shouldIgnore, walk} from './scanner.js';
 
 function usage() {
@@ -90,6 +91,16 @@ export function run(argv) {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1].replaceAll('\\', '/')}` || process.argv[1]?.endsWith('secret-sweep.js')) {
+// npm links the bin under another name (a symlink or shim), so compare real paths rather than argv text.
+function invokedDirectly() {
+  if (!process.argv[1]) return false;
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (invokedDirectly()) {
   process.exitCode = run(process.argv.slice(2));
 }
